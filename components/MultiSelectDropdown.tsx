@@ -11,7 +11,9 @@ interface MultiSelectDropdownProps {
 
 const MultiSelectDropdown: React.FC<MultiSelectDropdownProps> = ({ options, selectedOptions, onChange, placeholder, disabled, disabledOptions = [] }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -23,6 +25,14 @@ const MultiSelectDropdown: React.FC<MultiSelectDropdownProps> = ({ options, sele
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  useEffect(() => {
+    if (isOpen) {
+      setTimeout(() => searchInputRef.current?.focus(), 100);
+    } else {
+      setSearchTerm(''); // Reset search on close
+    }
+  }, [isOpen]);
+
   const toggleOption = (option: string) => {
     if (disabledOptions.includes(option)) return;
 
@@ -32,6 +42,12 @@ const MultiSelectDropdown: React.FC<MultiSelectDropdownProps> = ({ options, sele
       onChange([...selectedOptions, option]);
     }
   };
+
+  const filteredOptions = useMemo(() =>
+    options.filter(option =>
+      option.toLowerCase().includes(searchTerm.toLowerCase())
+    ), [options, searchTerm]
+  );
 
   const selectableOptions = useMemo(() => options.filter(o => !disabledOptions.includes(o)), [options, disabledOptions]);
   
@@ -69,6 +85,22 @@ const MultiSelectDropdown: React.FC<MultiSelectDropdownProps> = ({ options, sele
       {isOpen && (
         <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg">
           <div className="p-2 border-b border-gray-200 dark:border-gray-600">
+            <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <i className="fa-solid fa-magnifying-glass text-gray-400 w-4 h-4"></i>
+                </div>
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Kolonlarda ara..."
+                  className="block w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-200 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  onClick={(e) => e.stopPropagation()}
+                />
+            </div>
+          </div>
+          <div className="p-2 border-b border-gray-200 dark:border-gray-600">
              <button
               type="button"
               onClick={handleToggleAll}
@@ -79,7 +111,7 @@ const MultiSelectDropdown: React.FC<MultiSelectDropdownProps> = ({ options, sele
             </button>
           </div>
           <ul className="py-1 max-h-52 overflow-auto">
-            {options.map(option => {
+            {filteredOptions.map(option => {
               const isDisabled = disabledOptions.includes(option);
               return (
                 <li
@@ -98,6 +130,9 @@ const MultiSelectDropdown: React.FC<MultiSelectDropdownProps> = ({ options, sele
                 </li>
               );
             })}
+             {filteredOptions.length === 0 && options.length > 0 && (
+              <li className="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">Sonuç bulunamadı.</li>
+            )}
              {options.length === 0 && (
               <li className="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">Seçenek yok.</li>
             )}

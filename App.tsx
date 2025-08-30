@@ -93,19 +93,22 @@ function App() {
                 });
             };
 
-            if (!rowsA || rowsA.length === 0) {
+            const totalSourceAvailable = rowsA ? rowsA.reduce((sum, row) => sum + (Number(row[compareColumnA]) || 0), 0) : 0;
+
+            if (!rowsA || totalSourceAvailable <= 0) {
                 const resultRow: ExcelRow = {
                     [keyColumnHeader]: keyColumnValue,
                     'Durum': 'Kaynakta Bulunamadı',
                     'Hedef Miktar': originalTargetValue,
                     'Kullanılan Kaynak': 0,
                     'Hedef Kalan': originalTargetValue,
-                    'Kaynak Kalan': 0,
+                    'Kaynak Kalan': totalSourceAvailable,
                 };
-                populateOutputColumns(resultRow, null);
+                populateOutputColumns(resultRow, rowsA?.[0] || null);
                 finalResults.push(resultRow);
                 continue;
             }
+
 
             let targetRemaining = originalTargetValue;
             const generatedRowsForKey: ExcelRow[] = [];
@@ -131,23 +134,9 @@ function App() {
                 targetRemaining -= usedFromSource;
             }
 
-            if (generatedRowsForKey.length === 0) {
-                // This case handles when source rows exist but their compare values are all zero or less.
-                const resultRow: ExcelRow = {
-                    [keyColumnHeader]: keyColumnValue,
-                    'Durum': 'Kısmen Karşılandı', // Or a new status like 'Kaynak Yetersiz'
-                    'Hedef Miktar': originalTargetValue,
-                    'Kullanılan Kaynak': 0,
-                    'Hedef Kalan': originalTargetValue,
-                    'Kaynak Kalan': 0, // Not really applicable, could be sum of source values
-                };
-                populateOutputColumns(resultRow, rowsA[0]); // Populate with first source row for context
-                finalResults.push(resultRow);
-            } else {
-                const status = targetRemaining > 0 ? 'Kısmen Karşılandı' : 'Eşleşti';
-                generatedRowsForKey.forEach(r => r['Durum'] = status);
-                finalResults.push(...generatedRowsForKey);
-            }
+            const status = targetRemaining > 0 ? 'Kısmen Karşılandı' : 'Eşleşti';
+            generatedRowsForKey.forEach(r => r['Durum'] = status);
+            finalResults.push(...generatedRowsForKey);
         }
 
         const reorderedResults = finalResults.map(row => {
