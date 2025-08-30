@@ -1,0 +1,5 @@
+{
+  "name": "Excel Veri Karşılaştırma Aracı",
+  "description": "İki farklı Excel dosyası setini yükleyip, anahtar kolonları eşleştirerek ve karşılaştırma kolonu seçerek verileri karşılaştıran bir uygulama. Sonuçlar tablo olarak görüntülenebilir ve Excel olarak dışa aktarılabilir.",
+  "requestFramePermissions": []
+}
