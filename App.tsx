@@ -58,6 +58,28 @@ function App() {
   };
 
   const handleAddFiles = async (files: File[], type: 'source' | 'target') => {
+    const currentFiles = type === 'source' ? sourceFiles : targetFiles;
+    const currentFileNames = new Set(currentFiles.map(f => f.file.name));
+
+    const validFiles: File[] = [];
+    const duplicateFiles: string[] = [];
+
+    for (const file of files) {
+      if (currentFileNames.has(file.name)) {
+        duplicateFiles.push(file.name);
+      } else {
+        validFiles.push(file);
+      }
+    }
+    
+    if (duplicateFiles.length > 0) {
+      addToast(`"${duplicateFiles.join(', ')}" zaten bu bölümde mevcut olduğu için eklenmedi.`, 'info');
+    }
+
+    if (validFiles.length === 0) {
+      return;
+    }
+
     const setFileList = type === 'source' ? setSourceFiles : setTargetFiles;
     const setInvalidList = type === 'source' ? setInvalidSourceFiles : setInvalidTargetFiles;
     const setIsProcessing = type === 'source' ? setIsProcessingSource : setIsProcessingTarget;
@@ -65,7 +87,7 @@ function App() {
     setIsProcessing(true);
     setInvalidList([]);
     const newUploadedFiles: UploadedFileState[] = [];
-    for (const file of files) {
+    for (const file of validFiles) {
         try {
             const sheetNames = await getExcelSheetNames(file);
             newUploadedFiles.push({ file, sheetNames, selectedSheet: sheetNames.length > 1 ? '__ALL__' : (sheetNames[0] || '') });
