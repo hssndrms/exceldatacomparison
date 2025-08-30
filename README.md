@@ -46,7 +46,7 @@ Bu adımda, uygulamanın verileri nasıl eşleştireceğini ve karşılaştırac
     - Hedefteki hangi sayısal değerin, kaynaktaki hangi sayısal değerle karşılanacağını seçin.
     - Örneğin, Hedef'teki `İade Adedi`'nin, Kaynak'taki `Satış Miktarı`'ndan düşülerek kontrol edilmesi.
 
-3.  **Sonuç Tablosu Kolonları:**
+3.  **Sonuç Tablosu Kolonları:** 
     - Sonuç ekranında görmek istediğiniz ek bilgi kolonlarını seçin.
     - Anahtar olarak seçtiğiniz kolonlar otomatik olarak seçilir ve kilitlenir.
     - Seçilen kolonlar, alt bölümde etiketler halinde gösterilir. Anahtar olmayan kolonları etiketlerin yanındaki "x" ikonuna basarak kolayca kaldırabilirsiniz.
