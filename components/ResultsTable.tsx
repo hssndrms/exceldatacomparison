@@ -13,7 +13,7 @@ const ResultsTable: React.FC<ResultsTableProps> = ({ results, onReset, onBack })
   const [rowsPerPage, setRowsPerPage] = useState(25);
   const [filterText, setFilterText] = useState('');
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'ascending' | 'descending' } | null>(null);
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
 
   const headers = useMemo(() => (results.length > 0 ? Object.keys(results[0]) : []), [results]);
 
@@ -21,8 +21,8 @@ const ResultsTable: React.FC<ResultsTableProps> = ({ results, onReset, onBack })
     let processedData = [...results];
 
     // Status Filtering
-    if (statusFilter !== 'all') {
-      processedData = processedData.filter(row => row['Durum'] === statusFilter);
+    if (statusFilter.length > 0) {
+      processedData = processedData.filter(row => statusFilter.includes(String(row['Durum'])));
     }
 
     // Text Filtering
@@ -132,11 +132,18 @@ const ResultsTable: React.FC<ResultsTableProps> = ({ results, onReset, onBack })
   };
   
   const statusOptions = [
-    { value: 'all', label: 'Tümü' },
     { value: 'Eşleşti', label: 'Eşleşti' },
     { value: 'Kısmen Karşılandı', label: 'Kısmen Karşılandı' },
     { value: 'Kaynakta Bulunamadı', label: 'Kaynakta Bulunamadı' }
   ];
+
+  const handleStatusFilterToggle = (statusValue: string) => {
+    setStatusFilter(prev => 
+      prev.includes(statusValue)
+        ? prev.filter(s => s !== statusValue)
+        : [...prev, statusValue]
+    );
+  };
 
   return (
     <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md w-full mt-4">
@@ -180,11 +187,17 @@ const ResultsTable: React.FC<ResultsTableProps> = ({ results, onReset, onBack })
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Durum Filtresi:</span>
+          <button 
+            onClick={() => setStatusFilter([])} 
+            className={`px-3 py-1 text-sm font-medium rounded-md transition-colors shadow-sm ${statusFilter.length === 0 ? 'bg-blue-600 text-white border-blue-600' : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'}`}
+          >
+            Tümü
+          </button>
           {statusOptions.map(opt => (
             <button 
               key={opt.value} 
-              onClick={() => setStatusFilter(opt.value)} 
-              className={`px-3 py-1 text-sm font-medium rounded-md transition-colors shadow-sm ${statusFilter === opt.value ? 'bg-blue-600 text-white border-blue-600' : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'}`}
+              onClick={() => handleStatusFilterToggle(opt.value)} 
+              className={`px-3 py-1 text-sm font-medium rounded-md transition-colors shadow-sm ${statusFilter.includes(opt.value) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'}`}
             >
               {opt.label}
             </button>
