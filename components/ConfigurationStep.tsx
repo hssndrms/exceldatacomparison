@@ -1,6 +1,7 @@
 import React, { useMemo, useEffect } from 'react';
 import type { ComparisonConfig, KeyPair, ExcelRow } from '../types';
 import MultiSelectDropdown from './MultiSelectDropdown';
+import SearchableDropdown from './SearchableDropdown';
 import { v4 as uuidv4 } from 'uuid';
 
 interface ConfigurationStepProps {
@@ -19,7 +20,7 @@ const ConfigurationStep: React.FC<ConfigurationStepProps> = ({ dataA, dataB, con
     setConfig(prev => ({ ...prev, [key]: value }));
   };
 
-  const handleKeyPairChange = (id: string, part: 'columnA' | 'columnB', value: string) => {
+  const handleKeyPairChange = (id: string, part: 'columnA' | 'columnB', value: string | null) => {
     const newKeyPairs = config.keyPairs.map(pair => 
       pair.id === id ? { ...pair, [part]: value } : pair
     );
@@ -81,33 +82,27 @@ const ConfigurationStep: React.FC<ConfigurationStepProps> = ({ dataA, dataB, con
         <div className="space-y-3">
           {config.keyPairs.map((pair, index) => (
             <div key={pair.id} className="grid grid-cols-1 md:grid-cols-[1fr,auto,1fr,auto] gap-x-4 gap-y-2 items-center bg-gray-50 dark:bg-gray-700/50 p-3 rounded">
-              {/* Column A */}
               <div className="flex flex-col">
-                <select
-                  value={pair.columnA || ''}
-                  onChange={(e) => handleKeyPairChange(pair.id, 'columnA', e.target.value)}
-                  disabled={isComparing}
-                  className="w-full text-sm border-gray-300 rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                >
-                  <option value="" disabled>Kaynak'tan Seç</option>
-                  {dataA.headers.map(h => <option key={`key-a-${h}`} value={h}>{h}</option>)}
-                </select>
+                <SearchableDropdown
+                    options={dataA.headers}
+                    value={pair.columnA}
+                    onChange={(value) => handleKeyPairChange(pair.id, 'columnA', value)}
+                    placeholder="Kaynak'tan Seç"
+                    disabled={isComparing}
+                />
                 {pair.columnA && dataA.data[0] && <span className="text-xs text-gray-500 dark:text-gray-400 mt-1 truncate">Örnek: {String(dataA.data[0][pair.columnA])}</span>}
               </div>
 
               <span className="text-center font-bold text-gray-500 dark:text-gray-400 hidden md:block">=</span>
 
-              {/* Column B */}
               <div className="flex flex-col">
-                <select
-                  value={pair.columnB || ''}
-                  onChange={(e) => handleKeyPairChange(pair.id, 'columnB', e.target.value)}
-                  disabled={isComparing}
-                  className="w-full text-sm border-gray-300 rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                >
-                  <option value="" disabled>Hedef'ten Seç</option>
-                  {dataB.headers.map(h => <option key={`key-b-${h}`} value={h}>{h}</option>)}
-                </select>
+                 <SearchableDropdown
+                    options={dataB.headers}
+                    value={pair.columnB}
+                    onChange={(value) => handleKeyPairChange(pair.id, 'columnB', value)}
+                    placeholder="Hedef'ten Seç"
+                    disabled={isComparing}
+                />
                 {pair.columnB && dataB.data[0] && <span className="text-xs text-gray-500 dark:text-gray-400 mt-1 truncate">Örnek: {String(dataB.data[0][pair.columnB])}</span>}
               </div>
 
@@ -124,24 +119,20 @@ const ConfigurationStep: React.FC<ConfigurationStepProps> = ({ dataA, dataB, con
         {/* Compare Columns */}
         <div className="space-y-2">
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Karşılaştırma Kolonu (Sayısal)</label>
-          <select
-            value={config.compareColumnA || ''}
-            onChange={(e) => handleConfigChange('compareColumnA', e.target.value)}
-            disabled={isComparing}
-            className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-          >
-            <option value="" disabled>Kaynak'tan Seç (örn: Satış Adedi)</option>
-            {dataA.headers.map(h => <option key={`comp-a-${h}`} value={h}>{h}</option>)}
-          </select>
-          <select
-            value={config.compareColumnB || ''}
-            onChange={(e) => handleConfigChange('compareColumnB', e.target.value)}
-            disabled={isComparing}
-            className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-          >
-            <option value="" disabled>Hedef'ten Seç (örn: İade Adedi)</option>
-            {dataB.headers.map(h => <option key={`comp-b-${h}`} value={h}>{h}</option>)}
-          </select>
+          <SearchableDropdown
+             options={dataA.headers}
+             value={config.compareColumnA}
+             onChange={(value) => handleConfigChange('compareColumnA', value)}
+             placeholder="Kaynak'tan Seç (örn: Satış Adedi)"
+             disabled={isComparing}
+          />
+          <SearchableDropdown
+             options={dataB.headers}
+             value={config.compareColumnB}
+             onChange={(value) => handleConfigChange('compareColumnB', value)}
+             placeholder="Hedef'ten Seç (örn: İade Adedi)"
+             disabled={isComparing}
+          />
            <div className="flex items-start text-xs text-gray-500 dark:text-gray-400 space-x-2 pt-1">
             <i className="fa-solid fa-circle-info w-4 h-4 text-gray-400 dark:text-gray-500 mt-0.5"></i>
             <span>Hedef bölümündeki değeri karşılamak için Kaynak bölümünden kullanılacak sayısal kolonları seçin.</span>

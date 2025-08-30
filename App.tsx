@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
-import type { ProcessedExcelData, ComparisonConfig, ExcelRow } from './types';
+import React, { useState, useEffect, useCallback } from 'react';
+import type { ProcessedExcelData, ComparisonConfig, ExcelRow, UploadedFileState } from './types';
 import FileUpload from './components/FileUpload';
 import ConfigurationStep from './components/ConfigurationStep';
 import ResultsTable from './components/ResultsTable';
+import Toast, { ToastData } from './components/Toast';
+import { getExcelSheetNames, readExcelFiles, validateFileHeaders } from './services/excelService';
 import { v4 as uuidv4 } from 'uuid';
 
 const initialConfig: ComparisonConfig = {
@@ -14,27 +16,129 @@ const initialConfig: ComparisonConfig = {
 
 function App() {
   const [step, setStep] = useState(1);
-  const [dataA, setDataA] = useState<ProcessedExcelData | null>(null);
-  const [dataB, setDataB] = useState<ProcessedExcelData | null>(null);
-  const [fileInputKey, setFileInputKey] = useState(Date.now()); // To reset file inputs
+  const [dataA, setDataA] = useState<ProcessedExcelData>({ data: [], headers: [] });
+  const [dataB, setDataB] = useState<ProcessedExcelData>({ data: [], headers: [] });
   
+  const [sourceFiles, setSourceFiles] = useState<UploadedFileState[]>([]);
+  const [targetFiles, setTargetFiles] = useState<UploadedFileState[]>([]);
+  
+  const [invalidSourceFiles, setInvalidSourceFiles] = useState<string[]>([]);
+  const [invalidTargetFiles, setInvalidTargetFiles] = useState<string[]>([]);
+
+  const [isProcessingSource, setIsProcessingSource] = useState(false);
+  const [isProcessingTarget, setIsProcessingTarget] = useState(false);
+
   const [config, setConfig] = useState<ComparisonConfig>(initialConfig);
 
   const [results, setResults] = useState<ExcelRow[] | null>(null);
   const [isComparing, setIsComparing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [toasts, setToasts] = useState<ToastData[]>([]);
+
+  const addToast = useCallback((message: string, type: 'error' | 'info' = 'error') => {
+    const id = uuidv4();
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => {
+        setToasts(prev => prev.filter(t => t.id !== id));
+    }, 5000);
+  }, []);
 
   const handleReset = () => {
     setStep(1);
-    setDataA(null);
-    setDataB(null);
+    setDataA({ data: [], headers: [] });
+    setDataB({ data: [], headers: [] });
+    setSourceFiles([]);
+    setTargetFiles([]);
+    setInvalidSourceFiles([]);
+    setInvalidTargetFiles([]);
     setConfig(initialConfig);
     setResults(null);
     setIsComparing(false);
     setError(null);
-    setFileInputKey(Date.now()); // Change key to force re-mount of FileUpload components
   };
 
+  const handleAddFiles = async (files: File[], type: 'source' | 'target') => {
+    const setFileList = type === 'source' ? setSourceFiles : setTargetFiles;
+    const setInvalidList = type === 'source' ? setInvalidSourceFiles : setInvalidTargetFiles;
+    const setIsProcessing = type === 'source' ? setIsProcessingSource : setIsProcessingTarget;
+
+    setIsProcessing(true);
+    setInvalidList([]);
+    const newUploadedFiles: UploadedFileState[] = [];
+    for (const file of files) {
+        try {
+            const sheetNames = await getExcelSheetNames(file);
+            newUploadedFiles.push({ file, sheetNames, selectedSheet: sheetNames.length > 1 ? '__ALL__' : (sheetNames[0] || '') });
+        } catch (err) {
+            const errorMsg = err instanceof Error ? err.message : String(err);
+            addToast(`Excel sayfa adları okunurken hata: ${errorMsg}`);
+        }
+    }
+    setFileList(prev => [...prev, ...newUploadedFiles]);
+    setIsProcessing(false);
+  };
+
+  const handleRemoveFile = (index: number, type: 'source' | 'target') => {
+      const setFileList = type === 'source' ? setSourceFiles : setTargetFiles;
+      const setInvalidList = type === 'source' ? setInvalidSourceFiles : setInvalidTargetFiles;
+      setFileList(prev => prev.filter((_, i) => i !== index));
+      setInvalidList([]);
+  };
+
+  const handleSheetChange = (index: number, newSheet: string, type: 'source' | 'target') => {
+      const setFileList = type === 'source' ? setSourceFiles : setTargetFiles;
+      const setInvalidList = type === 'source' ? setInvalidSourceFiles : setInvalidTargetFiles;
+      setFileList(prev => prev.map((file, i) => i === index ? { ...file, selectedSheet: newSheet } : file));
+      setInvalidList([]);
+  };
+  
+  const handleValidateAndProceed = async () => {
+    setInvalidSourceFiles([]);
+    setInvalidTargetFiles([]);
+    setError(null);
+
+    setIsProcessingSource(true);
+    setIsProcessingTarget(true);
+
+    const [invalidSource, invalidTarget] = await Promise.all([
+        validateFileHeaders(sourceFiles),
+        validateFileHeaders(targetFiles)
+    ]);
+    
+    let hasError = false;
+    if (invalidSource.length > 0) {
+        setInvalidSourceFiles(invalidSource);
+        hasError = true;
+    }
+    if (invalidTarget.length > 0) {
+        setInvalidTargetFiles(invalidTarget);
+        hasError = true;
+    }
+
+    if (hasError) {
+        addToast("Devam etmeden önce lütfen kolon başlıkları uyumsuz olan dosyaları düzeltin veya kaldırın.", "error");
+        setIsProcessingSource(false);
+        setIsProcessingTarget(false);
+        return;
+    }
+
+    try {
+        const [sourceResult, targetResult] = await Promise.all([
+            readExcelFiles(sourceFiles),
+            readExcelFiles(targetFiles)
+        ]);
+        setDataA(sourceResult);
+        setDataB(targetResult);
+        setStep(2);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      setError(`Dosya okunurken hata: ${errorMsg}`);
+    } finally {
+      setIsProcessingSource(false);
+      setIsProcessingTarget(false);
+    }
+  };
+  
   const handleCompare = () => {
     if (!dataA || !dataB || !config.compareColumnA || !config.compareColumnB || config.keyPairs.length === 0 || config.keyPairs.some(p => !p.columnA || !p.columnB)) {
       setError("Lütfen karşılaştırma için tüm gerekli alanları seçtiğinizden emin olun.");
@@ -49,7 +153,9 @@ function App() {
 
         const sourceKeyColNames = keyPairs.map(p => p.columnA!).filter(Boolean);
         const prefixedSourceKeyCols = sourceKeyColNames.map(c => `Kaynak: ${c}`);
-        const prefixedTargetKeyCols = keyPairs.map(p => p.columnB!).filter(Boolean).map(c => `Hedef: ${c}`);
+        const targetKeyColNames = keyPairs.map(p => p.columnB!).filter(Boolean);
+        const prefixedTargetKeyCols = targetKeyColNames.map(c => `Hedef: ${c}`);
+        
         const allPrefixedKeyCols = [...prefixedSourceKeyCols, ...prefixedTargetKeyCols];
         const keyColumnHeader = `Anahtar (${sourceKeyColNames.join(' - ')})`;
         
@@ -104,39 +210,38 @@ function App() {
                     'Hedef Kalan': originalTargetValue,
                     'Kaynak Kalan': totalSourceAvailable,
                 };
-                populateOutputColumns(resultRow, rowsA?.[0] || null);
+                populateOutputColumns(resultRow, bData.originalRow);
                 finalResults.push(resultRow);
                 continue;
             }
 
-
             let targetRemaining = originalTargetValue;
-            const generatedRowsForKey: ExcelRow[] = [];
+            let sourceAvailable = totalSourceAvailable;
+            let firstRowA = rowsA[0];
 
-            for (const rowA of rowsA) {
-                if (targetRemaining <= 0) break;
-                const sourceValue = Number(rowA[compareColumnA]) || 0;
-                if (sourceValue <= 0) continue;
-
-                const usedFromSource = Math.min(targetRemaining, sourceValue);
-                const sourceRemaining = sourceValue - usedFromSource;
-                
+            if (targetRemaining <= sourceAvailable) {
                 const resultRow: ExcelRow = {
                     [keyColumnHeader]: keyColumnValue,
-                    'Durum': '', // Will set later
+                    'Durum': 'Eşleşti',
                     'Hedef Miktar': originalTargetValue,
-                    'Kullanılan Kaynak': usedFromSource,
-                    'Hedef Kalan': targetRemaining - usedFromSource,
-                    'Kaynak Kalan': sourceRemaining,
+                    'Kullanılan Kaynak': originalTargetValue,
+                    'Hedef Kalan': 0,
+                    'Kaynak Kalan': sourceAvailable - originalTargetValue,
                 };
-                populateOutputColumns(resultRow, rowA);
-                generatedRowsForKey.push(resultRow);
-                targetRemaining -= usedFromSource;
+                populateOutputColumns(resultRow, firstRowA);
+                finalResults.push(resultRow);
+            } else {
+                const resultRow: ExcelRow = {
+                    [keyColumnHeader]: keyColumnValue,
+                    'Durum': 'Kısmen Karşılandı',
+                    'Hedef Miktar': originalTargetValue,
+                    'Kullanılan Kaynak': sourceAvailable,
+                    'Hedef Kalan': originalTargetValue - sourceAvailable,
+                    'Kaynak Kalan': 0,
+                };
+                populateOutputColumns(resultRow, firstRowA);
+                finalResults.push(resultRow);
             }
-
-            const status = targetRemaining > 0 ? 'Kısmen Karşılandı' : 'Eşleşti';
-            generatedRowsForKey.forEach(r => r['Durum'] = status);
-            finalResults.push(...generatedRowsForKey);
         }
 
         const reorderedResults = finalResults.map(row => {
@@ -166,6 +271,8 @@ function App() {
           <p className="mt-2 text-lg text-gray-600 dark:text-gray-400">İki farklı Excel setindeki verileri zahmetsizce karşılaştırın.</p>
         </header>
 
+        <Toast toasts={toasts} />
+
         {error && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg relative mb-6" role="alert">
             <strong className="font-bold">Hata: </strong>
@@ -178,35 +285,42 @@ function App() {
             <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-6 text-center">Adım 1: Excel Dosyalarınızı Yükleyin</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <FileUpload
-                key={`file-a-${fileInputKey}`}
                 id="file-upload-a"
                 title="Kaynak (örn: Satış Faturaları)"
-                onFilesProcessed={setDataA}
-                setProcessingError={setError}
                 disabled={isComparing}
+                uploadedFiles={sourceFiles}
+                isProcessing={isProcessingSource}
+                onAddFiles={(files) => handleAddFiles(files, 'source')}
+                onRemoveFile={(index) => handleRemoveFile(index, 'source')}
+                onSheetChange={(index, sheet) => handleSheetChange(index, sheet, 'source')}
+                invalidFileNames={invalidSourceFiles}
               />
               <FileUpload
-                key={`file-b-${fileInputKey}`}
                 id="file-upload-b"
                 title="Hedef (örn: İade İrsaliyeleri)"
-                onFilesProcessed={setDataB}
-                setProcessingError={setError}
                 disabled={isComparing}
+                uploadedFiles={targetFiles}
+                isProcessing={isProcessingTarget}
+                onAddFiles={(files) => handleAddFiles(files, 'target')}
+                onRemoveFile={(index) => handleRemoveFile(index, 'target')}
+                onSheetChange={(index, sheet) => handleSheetChange(index, sheet, 'target')}
+                invalidFileNames={invalidTargetFiles}
               />
             </div>
             <div className="mt-8 flex justify-end">
                 <button
-                    onClick={() => setStep(2)}
-                    disabled={!dataA?.data.length || !dataB?.data.length}
+                    onClick={handleValidateAndProceed}
+                    disabled={sourceFiles.length === 0 || targetFiles.length === 0 || isProcessingSource || isProcessingTarget}
                     className="px-6 py-2.5 bg-blue-600 text-white font-medium text-sm leading-tight uppercase rounded-md shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                    İleri <i className="fa-solid fa-arrow-right ml-2"></i>
+                    {(isProcessingSource || isProcessingTarget) ? 'Doğrulanıyor...' : 'İleri'}
+                    <i className="fa-solid fa-arrow-right ml-2"></i>
                 </button>
             </div>
           </div>
         )}
 
-        {step === 2 && dataA && dataB && (
+        {step === 2 && (
           <ConfigurationStep
             dataA={dataA}
             dataB={dataB}

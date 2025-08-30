@@ -1,4 +1,3 @@
-
 import type { ExcelRow, UploadedFileState } from '../types';
 
 declare const XLSX: any;
@@ -20,53 +19,96 @@ export const getExcelSheetNames = (file: File): Promise<string[]> => {
     });
 };
 
-export const readExcelFiles = (filesWithSheets: UploadedFileState[]): Promise<{ data: ExcelRow[], headers: string[] }> => {
+export const validateFileHeaders = (
+  filesWithSheets: UploadedFileState[]
+): Promise<string[]> => {
+  return new Promise(async (resolve) => {
+    if (filesWithSheets.length <= 1) {
+      return resolve([]);
+    }
+
+    let firstHeaders: string[] | null = null;
+    const invalidFileNames: string[] = [];
+
+    for (const fileItem of filesWithSheets) {
+      const fileName = fileItem.file.name;
+      try {
+        const fileBuffer = await fileItem.file.arrayBuffer();
+        const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
+
+        const sheetsToProcess: string[] = fileItem.selectedSheet === '__ALL__' ? workbook.SheetNames : [fileItem.selectedSheet];
+        
+        let headersFoundInFile = false;
+        for (const sheetName of sheetsToProcess) {
+          if (!workbook.SheetNames.includes(sheetName)) continue;
+          
+          const worksheet = workbook.Sheets[sheetName];
+          const jsonData: ExcelRow[] = XLSX.utils.sheet_to_json(worksheet, { defval: "", raw: false, dateNF: 'yyyy-mm-dd' });
+
+          if (jsonData.length > 0) {
+            headersFoundInFile = true;
+            const currentHeaders = Object.keys(jsonData[0]);
+            
+            if (!firstHeaders) {
+              firstHeaders = currentHeaders;
+            } else if (JSON.stringify(firstHeaders) !== JSON.stringify(currentHeaders)) {
+              if (!invalidFileNames.includes(fileName)) {
+                invalidFileNames.push(fileName);
+              }
+              break; 
+            }
+          }
+        }
+      } catch (error) {
+        if (!invalidFileNames.includes(fileName)) {
+          invalidFileNames.push(fileName);
+        }
+      }
+    }
+    resolve(invalidFileNames);
+  });
+};
+
+
+export const readExcelFiles = (
+  filesWithSheets: UploadedFileState[]
+): Promise<{ data: ExcelRow[], headers: string[] }> => {
   return new Promise(async (resolve, reject) => {
     if (filesWithSheets.length === 0) {
       return resolve({ data: [], headers: [] });
     }
 
     const allData: ExcelRow[] = [];
-    let firstHeaders: string[] | null = null;
+    let headers: string[] = [];
 
-    for (const fileItem of filesWithSheets) {
-        const file = fileItem.file;
-        const selectedSheet = fileItem.selectedSheet;
+    try {
+        for (const fileItem of filesWithSheets) {
+          const file = fileItem.file;
+          const selectedSheet = fileItem.selectedSheet;
 
-        try {
-            const fileBuffer = await file.arrayBuffer();
-            const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
+          const fileBuffer = await file.arrayBuffer();
+          const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
 
-            const sheetsToProcess: string[] = [];
-            if (selectedSheet === '__ALL__') {
-                sheetsToProcess.push(...workbook.SheetNames);
-            } else if (selectedSheet && workbook.SheetNames.includes(selectedSheet)) {
-                sheetsToProcess.push(selectedSheet);
-            }
+          const sheetsToProcess: string[] = selectedSheet === '__ALL__' ? workbook.SheetNames : [selectedSheet];
+          
+          for (const sheetName of sheetsToProcess) {
+              if (!workbook.SheetNames.includes(sheetName)) continue;
 
-            for (const sheetName of sheetsToProcess) {
-                const worksheet = workbook.Sheets[sheetName];
-                if (worksheet) {
-                    const jsonData: ExcelRow[] = XLSX.utils.sheet_to_json(worksheet, { defval: "", raw: false, dateNF: 'yyyy-mm-dd' });
-                    
-                    if (jsonData.length > 0) {
-                        const currentHeaders = Object.keys(jsonData[0]);
-                        if (!firstHeaders) {
-                            firstHeaders = currentHeaders;
-                        } else if (JSON.stringify(firstHeaders) !== JSON.stringify(currentHeaders)) {
-                            console.warn(`"${sheetName}" sayfası "${file.name}" dosyasında farklı başlıklara sahip ve atlanacak.`);
-                            continue;
-                        }
-                        allData.push(...jsonData);
-                    }
-                }
-            }
-        } catch (error) {
-            return reject(error);
+              const worksheet = workbook.Sheets[sheetName];
+              const jsonData: ExcelRow[] = XLSX.utils.sheet_to_json(worksheet, { defval: "", raw: false, dateNF: 'yyyy-mm-dd' });
+              
+              if (jsonData.length > 0) {
+                  if (headers.length === 0) {
+                      headers = Object.keys(jsonData[0]);
+                  }
+                  allData.push(...jsonData);
+              }
+          }
         }
+        resolve({ data: allData, headers });
+    } catch (error) {
+        reject(error);
     }
-    
-    resolve({ data: allData, headers: firstHeaders || [] });
   });
 };
 
