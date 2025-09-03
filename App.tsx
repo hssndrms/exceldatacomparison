@@ -308,7 +308,7 @@ function App() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <FileUpload
                 id="file-upload-a"
-                title="Kaynak (örn: Satış Faturaları)"
+                title="Kaynak"
                 disabled={isComparing}
                 uploadedFiles={sourceFiles}
                 isProcessing={isProcessingSource}
@@ -319,7 +319,7 @@ function App() {
               />
               <FileUpload
                 id="file-upload-b"
-                title="Hedef (örn: İade İrsaliyeleri)"
+                title="Hedef"
                 disabled={isComparing}
                 uploadedFiles={targetFiles}
                 isProcessing={isProcessingTarget}
